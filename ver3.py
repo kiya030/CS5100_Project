@@ -137,14 +137,14 @@ for j, t_info in enumerate(teachers):
                 for r in range(num_rooms):
                     model.Add(course_assignment[(i, j, t_idx, r)] == 0)
 
-# # (F) Course’s preferred times
-# for i, c_info in enumerate(courses):
-#     pref_set = set(c_info["preferred_times"])
-#     for t_idx, slot_val in enumerate(time_slots):
-#         if slot_val not in pref_set:
-#             for j in range(num_teachers):
-#                 for r in range(num_rooms):
-#                     model.Add(course_assignment[(i, j, t_idx, r)] == 0)
+# (F) Course’s preferred times
+for i, c_info in enumerate(courses):
+    pref_set = set(c_info["preferred_times"])
+    for t_idx, slot_val in enumerate(time_slots):
+        if slot_val not in pref_set:
+            for j in range(num_teachers):
+                for r in range(num_rooms):
+                    model.Add(course_assignment[(i, j, t_idx, r)] == 0)
 
 # (G) Teacher–department match
 for i, c_info in enumerate(courses):
@@ -158,16 +158,6 @@ for i, c_info in enumerate(courses):
                     model.Add(course_assignment[(i, j, t_idx, r)] == 0)
 
 # -------------------------- 4) SOFT CONSTRAINTS (Large Gap Minimization) ----
-#  Course’s preferred times
-for i, c_info in enumerate(courses):
-    pref_set = set(c_info["preferred_times"])
-    for t_idx, slot_val in enumerate(time_slots):
-        if slot_val not in pref_set:
-            for j in range(num_teachers):
-                for r in range(num_rooms):
-                    penalty_var = model.NewBoolVar(f"penalty_c{i}_t{t_idx}")
-                    model.Add(course_assignment[(i, j, t_idx, r)] <= penalty_var)
-                    model.Minimize(penalty_var * 10)  # Penalize but allow assignment
 
 # We'll minimize the "spread" for each group's courses.
 all_groups = list({c["group"] for c in courses})
