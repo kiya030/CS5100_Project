@@ -3,38 +3,69 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # -------------------------- 1) DATA SETUP -----------------------------------
-courses = [
-    {"id": "CS101", "department": "CS",      "group": "GroupA", "preferred_times": [8, 9],         "num_students": 45},
-    {"id": "CS102", "department": "CS",      "group": "GroupA", "preferred_times": [10, 11],       "num_students": 40},
-    {"id": "MA202", "department": "Math",    "group": "GroupB", "preferred_times": [9, 11],        "num_students": 35},
-    {"id": "MA203", "department": "Math",    "group": "GroupB", "preferred_times": [13, 14],       "num_students": 28},
-    {"id": "PH303", "department": "Physics", "group": "GroupC", "preferred_times": [10, 12, 14],   "num_students": 20},
-    {"id": "PH304", "department": "Physics", "group": "GroupC", "preferred_times": [8, 10, 14],    "num_students": 15},
-    {"id": "CS201", "department": "CS",      "group": "GroupD", "preferred_times": [8, 14],        "num_students": 50},
-    {"id": "MA301", "department": "Math",    "group": "GroupE", "preferred_times": [9, 15],        "num_students": 25},
-    {"id": "PH401", "department": "Physics", "group": "GroupF", "preferred_times": [12, 14, 16],   "num_students": 10},
-    {"id": "PH402", "department": "Physics", "group": "GroupG", "preferred_times": [14, 15],       "num_students": 10},
-]
+# courses = [
+#     {"id": "CS101", "department": "CS",      "group": "GroupA", "preferred_times": [8, 9],         "num_students": 45},
+#     {"id": "CS102", "department": "CS",      "group": "GroupA", "preferred_times": [10, 11],       "num_students": 40},
+#     {"id": "MA202", "department": "Math",    "group": "GroupB", "preferred_times": [9, 11],        "num_students": 35},
+#     {"id": "MA203", "department": "Math",    "group": "GroupB", "preferred_times": [13, 14],       "num_students": 28},
+#     {"id": "PH303", "department": "Physics", "group": "GroupC", "preferred_times": [10, 12, 14],   "num_students": 20},
+#     {"id": "PH304", "department": "Physics", "group": "GroupC", "preferred_times": [8, 10, 14],    "num_students": 15},
+#     {"id": "CS201", "department": "CS",      "group": "GroupD", "preferred_times": [8, 14],        "num_students": 50},
+#     {"id": "MA301", "department": "Math",    "group": "GroupE", "preferred_times": [9, 15],        "num_students": 25},
+#     {"id": "PH401", "department": "Physics", "group": "GroupF", "preferred_times": [12, 14, 16],   "num_students": 10},
+#     {"id": "PH402", "department": "Physics", "group": "GroupG", "preferred_times": [14, 15],       "num_students": 10},
+# ]
+#
+# teachers = [
+#     {"name": "Dr. X", "department": "CS",      "available_times": [8, 9, 10, 11, 13, 14]},
+#     {"name": "Dr. Y", "department": "Math",    "available_times": [9, 11, 13, 14, 15]},
+#     {"name": "Dr. Z", "department": "Physics", "available_times": [8, 10, 12, 14, 15, 16]},
+#     {"name": "Dr. W", "department": "Physics", "available_times": [8, 10, 12, 14, 15, 16]},
+# ]
+#
+# rooms = [
+#     {"id": "Room101", "capacity": 50},
+#     {"id": "Room102", "capacity": 40},
+#     {"id": "Lab201",  "capacity": 30},
+#     {"id": "Lab202",  "capacity": 20},
+# ]
+#
+# time_slots = [8, 9, 10, 11, 12, 13, 14, 15, 16]  # 8 AM through 4 PM
 
-teachers = [
-    {"name": "Dr. X", "department": "CS",      "available_times": [8, 9, 10, 11, 13, 14]},
-    {"name": "Dr. Y", "department": "Math",    "available_times": [9, 11, 13, 14, 15]},
-    {"name": "Dr. Z", "department": "Physics", "available_times": [8, 10, 12, 14, 15, 16]},
-    {"name": "Dr. W", "department": "Physics", "available_times": [8, 10, 12, 14, 15, 16]},
-]
+def load_schedule_data(file_path="data.csv"):
+    df = pd.read_csv(file_path)
 
-rooms = [
-    {"id": "Room101", "capacity": 50},
-    {"id": "Room102", "capacity": 40},
-    {"id": "Lab201",  "capacity": 30},
-    {"id": "Lab202",  "capacity": 20},
-]
+    courses, teachers, rooms, time_slots = [], [], [], []
 
-time_slots = [8, 9, 10, 11, 12, 13, 14, 15, 16]  # 8 AM through 4 PM
+    for _, row in df.iterrows():
+        if row["type"] == "course":
+            courses.append({
+                "id": row["id"],
+                "department": row["department"],
+                "group": row["group"],
+                "preferred_times": list(map(int, row["preferred_times"].split(','))),
+                "num_students": int(row["num_students"])
+            })
+        elif row["type"] == "teacher":
+            teachers.append({
+                "name": row["name"],
+                "department": row["department"],
+                "available_times": list(map(int, row["available_times"].split(',')))
+            })
+        elif row["type"] == "room":
+            rooms.append({
+                "id": row["id"],
+                "capacity": int(row["capacity"])
+            })
+        elif row["type"] == "time_slot":
+            time_slots.append(int(row["id"]))
+
+    return courses, teachers, rooms, time_slots
 
 # -------------------------- 2) CREATE THE MODEL -----------------------------
-model = cp_model.CpModel()
+courses, teachers, rooms, time_slots = load_schedule_data()
 
+model = cp_model.CpModel()
 num_courses = len(courses)
 num_teachers = len(teachers)
 num_rooms = len(rooms)
@@ -106,14 +137,14 @@ for j, t_info in enumerate(teachers):
                 for r in range(num_rooms):
                     model.Add(course_assignment[(i, j, t_idx, r)] == 0)
 
-# (F) Course’s preferred times
-for i, c_info in enumerate(courses):
-    pref_set = set(c_info["preferred_times"])
-    for t_idx, slot_val in enumerate(time_slots):
-        if slot_val not in pref_set:
-            for j in range(num_teachers):
-                for r in range(num_rooms):
-                    model.Add(course_assignment[(i, j, t_idx, r)] == 0)
+# # (F) Course’s preferred times
+# for i, c_info in enumerate(courses):
+#     pref_set = set(c_info["preferred_times"])
+#     for t_idx, slot_val in enumerate(time_slots):
+#         if slot_val not in pref_set:
+#             for j in range(num_teachers):
+#                 for r in range(num_rooms):
+#                     model.Add(course_assignment[(i, j, t_idx, r)] == 0)
 
 # (G) Teacher–department match
 for i, c_info in enumerate(courses):
@@ -127,6 +158,16 @@ for i, c_info in enumerate(courses):
                     model.Add(course_assignment[(i, j, t_idx, r)] == 0)
 
 # -------------------------- 4) SOFT CONSTRAINTS (Large Gap Minimization) ----
+#  Course’s preferred times
+for i, c_info in enumerate(courses):
+    pref_set = set(c_info["preferred_times"])
+    for t_idx, slot_val in enumerate(time_slots):
+        if slot_val not in pref_set:
+            for j in range(num_teachers):
+                for r in range(num_rooms):
+                    penalty_var = model.NewBoolVar(f"penalty_c{i}_t{t_idx}")
+                    model.Add(course_assignment[(i, j, t_idx, r)] <= penalty_var)
+                    model.Minimize(penalty_var * 10)  # Penalize but allow assignment
 
 # We'll minimize the "spread" for each group's courses.
 all_groups = list({c["group"] for c in courses})
