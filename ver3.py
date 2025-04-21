@@ -261,6 +261,7 @@ if assignments:
     plt.title("Number of Courses per Timeslot")
     plt.xlabel("Timeslot (Hour)")
     plt.ylabel("Course Count")
+    plt.tight_layout()
     plt.show()
 
     room_counts = df_schedule["Room"].value_counts()
@@ -269,4 +270,52 @@ if assignments:
     plt.title("Number of Courses per Room")
     plt.xlabel("Room")
     plt.ylabel("Course Count")
+    plt.tight_layout()
+    plt.show()
+
+    # 6.3) Heatmap of Time Slot Utilization (Time vs Room)
+    import seaborn as sns
+    heatmap_df = df_schedule.groupby(["Time", "Room"]).size().unstack(fill_value=0)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(heatmap_df, annot=True, cmap="YlGnBu", cbar=True)
+    plt.title("Room Utilization Heatmap (Time vs Room)")
+    plt.xlabel("Room")
+    plt.ylabel("Time Slot")
+    plt.tight_layout()
+    plt.show()
+
+    # 6.4) Stacked Bar Chart: Course Distribution by Department per Time Slot
+    stacked_df = df_schedule.groupby(["Time", "Department"]).size().unstack(fill_value=0)
+    stacked_df.plot(kind="bar", stacked=True, figsize=(10, 6))
+    plt.title("Stacked Bar Chart: Courses by Department per Time Slot")
+    plt.xlabel("Time Slot")
+    plt.ylabel("Number of Courses")
+    plt.legend(title="Department")
+    plt.tight_layout()
+    plt.show()
+
+    # 6.5) Gantt Chart of Course Schedule by Group
+    import matplotlib.patches as mpatches
+    fig, ax = plt.subplots(figsize=(10, 6))
+    groups = df_schedule["Group"].unique()
+    colors = plt.cm.tab20.colors
+    group_color_map = {g: colors[i % len(colors)] for i, g in enumerate(groups)}
+
+    for _, row in df_schedule.iterrows():
+        ax.barh(row["Group"], width=1, left=row["Time"], height=0.6,
+                color=group_color_map[row["Group"]], edgecolor="black")
+        ax.text(row["Time"] + 0.1, row["Group"], row["Course"], fontsize=8, va='center')
+
+    ax.set_xlabel("Time Slot")
+    ax.set_title("Gantt Chart of Course Schedule by Group")
+    plt.tight_layout()
+    plt.show()
+
+    # 6.6) Pie Chart of Room Usage Distribution
+    room_pie_counts = df_schedule["Room"].value_counts()
+    plt.figure()
+    room_pie_counts.plot(kind="pie", autopct='%1.1f%%', startangle=140)
+    plt.title("Room Usage Distribution")
+    plt.ylabel("")  # Hide y-label for aesthetics
+    plt.tight_layout()
     plt.show()
