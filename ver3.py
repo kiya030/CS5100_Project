@@ -32,8 +32,14 @@ import matplotlib.pyplot as plt
 #
 # time_slots = [8, 9, 10, 11, 12, 13, 14, 15, 16]  # 8 AM through 4 PM
 
-def load_schedule_data(file_path="data.csv"):
-    df = pd.read_csv(file_path)
+def load_schedule_data(file):
+    """Load schedule data from a CSV file or DataFrame."""
+    if isinstance(file, str):  # If file is a path
+        df = pd.read_csv(file)
+    elif isinstance(file, pd.DataFrame):  # If file is already a DataFrame
+        df = file
+    else:
+        raise ValueError("Input must be a file path or a Pandas DataFrame.")
 
     courses, teachers, rooms, time_slots = [], [], [], []
 
@@ -63,259 +69,170 @@ def load_schedule_data(file_path="data.csv"):
     return courses, teachers, rooms, time_slots
 
 # -------------------------- 2) CREATE THE MODEL -----------------------------
-courses, teachers, rooms, time_slots = load_schedule_data()
+def solve_schedule(file, constraints):
+    """Solve the scheduling problem using the provided data and constraints."""
+    courses, teachers, rooms, time_slots = load_schedule_data(file)
 
-model = cp_model.CpModel()
-num_courses = len(courses)
-num_teachers = len(teachers)
-num_rooms = len(rooms)
-num_time_slots = len(time_slots)
+    model = cp_model.CpModel()
+    num_courses = len(courses)
+    num_teachers = len(teachers)
+    num_rooms = len(rooms)
+    num_time_slots = len(time_slots)
 
-# 4D decision variables:
-# course_assignment[(i, j, t, r)] = 1 iff
-#   course i is assigned to teacher j at timeslot t in room r.
-course_assignment = {}
-for i in range(num_courses):
-    for j in range(num_teachers):
-        for t in range(num_time_slots):
-            for r in range(num_rooms):
-                var_name = f"assign_c{i}_T{j}_t{t}_r{r}"
-                course_assignment[(i, j, t, r)] = model.NewBoolVar(var_name)
+    # 4D decision variables
+    course_assignment = {}
+    for i in range(num_courses):
+        for j in range(num_teachers):
+            for t in range(num_time_slots):
+                for r in range(num_rooms):
+                    var_name = f"assign_c{i}_T{j}_t{t}_r{r}"
+                    course_assignment[(i, j, t, r)] = model.NewBoolVar(var_name)
 
 # -------------------------- 3) HARD CONSTRAINTS -----------------------------
-
-# (A) Each course assigned exactly once
-for i in range(num_courses):
-    model.Add(
-        sum(
-            course_assignment[(i, j, t, r)]
-            for j in range(num_teachers)
-            for t in range(num_time_slots)
-            for r in range(num_rooms)
-        ) == 1
-    )
-
-# (B) A teacher cannot teach two courses at the same time
-for j in range(num_teachers):
-    for t in range(num_time_slots):
+    # (A) Each course assigned exactly once
+    for i in range(num_courses):
         model.Add(
             sum(
                 course_assignment[(i, j, t, r)]
-                for i in range(num_courses)
-                for r in range(num_rooms)
-            ) <= 1
-        )
-
-# (C) No two courses in the same room at the same time
-for t in range(num_time_slots):
-    for r in range(num_rooms):
-        model.Add(
-            sum(
-                course_assignment[(i, j, t, r)]
-                for i in range(num_courses)
                 for j in range(num_teachers)
-            ) <= 1
+                for t in range(num_time_slots)
+                for r in range(num_rooms)
+            ) == 1
         )
 
-# (D) Room capacity constraint
-# If a course has more students than the room capacity, disallow assignment
-for i, c_info in enumerate(courses):
-    n_students = c_info["num_students"]
-    for r, room_info in enumerate(rooms):
-        if n_students > room_info["capacity"]:
-            # Force those assignments to 0
-            for j in range(num_teachers):
-                for t in range(num_time_slots):
-                    model.Add(course_assignment[(i, j, t, r)] == 0)
+    # Apply constraints dynamically based on user input
+    # (B) A teacher cannot teach two courses at the same time
+    if constraints.get("prevent_teacher_conflicts", True):
+        for j in range(num_teachers):
+            for t in range(num_time_slots):
+                model.Add(
+                    sum(
+                        course_assignment[(i, j, t, r)]
+                        for i in range(num_courses)
+                        for r in range(num_rooms)
+                    ) <= 1
+                )
 
-# (E) Teacher availability
-for j, t_info in enumerate(teachers):
-    avail = set(t_info["available_times"])
-    for t_idx, slot_val in enumerate(time_slots):
-        if slot_val not in avail:
-            for i in range(num_courses):
-                for r in range(num_rooms):
-                    model.Add(course_assignment[(i, j, t_idx, r)] == 0)
+    # (C) No two courses in the same room at the same time
+    if constraints.get("room_time_conflicts", True):
+        for t in range(num_time_slots):
+            for r in range(num_rooms):
+                model.Add(
+                    sum(
+                        course_assignment[(i, j, t, r)]
+                        for i in range(num_courses)
+                        for j in range(num_teachers)
+                    ) <= 1
+                )
 
-# (F) Course’s preferred times
-for i, c_info in enumerate(courses):
-    pref_set = set(c_info["preferred_times"])
-    for t_idx, slot_val in enumerate(time_slots):
-        if slot_val not in pref_set:
-            for j in range(num_teachers):
-                for r in range(num_rooms):
-                    model.Add(course_assignment[(i, j, t_idx, r)] == 0)
+    # (D) Room capacity constraint
+    # If a course has more students than the room capacity, disallow assignment
+    if constraints.get("room_capacity_limit", True):
+        for i, c_info in enumerate(courses):
+            n_students = c_info["num_students"]
+            for r, room_info in enumerate(rooms):
+                if n_students > room_info["capacity"]:
+                    for j in range(num_teachers):
+                        for t in range(num_time_slots):
+                            model.Add(course_assignment[(i, j, t, r)] == 0)
 
-# (G) Teacher–department match
-for i, c_info in enumerate(courses):
-    c_dept = c_info["department"]
-    for j, t_info in enumerate(teachers):
-        t_dept = t_info["department"]
-        if t_dept != c_dept:
-            # Disallow all time/room combos
-            for t_idx in range(num_time_slots):
-                for r in range(num_rooms):
-                    model.Add(course_assignment[(i, j, t_idx, r)] == 0)
+    # (E) Teacher availability
+    if constraints.get("teacher_availability", True):
+        for j, t_info in enumerate(teachers):
+            avail = set(t_info["available_times"])
+            for t_idx, slot_val in enumerate(time_slots):
+                if slot_val not in avail:
+                    for i in range(num_courses):
+                        for r in range(num_rooms):
+                            model.Add(course_assignment[(i, j, t_idx, r)] == 0)
+
+    # (F) Course’s preferred times
+    if constraints.get("course_preferred_times", True):
+        for i, c_info in enumerate(courses):
+            pref_set = set(c_info["preferred_times"])
+            for t_idx, slot_val in enumerate(time_slots):
+                if slot_val not in pref_set:
+                    for j in range(num_teachers):
+                        for r in range(num_rooms):
+                            model.Add(course_assignment[(i, j, t_idx, r)] == 0)
+
+    # (G) Teacher–department match
+    if constraints.get("department_course_match", True):
+        for i, c_info in enumerate(courses):
+            c_dept = c_info["department"]
+            for j, t_info in enumerate(teachers):
+                t_dept = t_info["department"]
+                if t_dept != c_dept:
+                    for t_idx in range(num_time_slots):
+                        for r in range(num_rooms):
+                            model.Add(course_assignment[(i, j, t_idx, r)] == 0)
 
 # -------------------------- 4) SOFT CONSTRAINTS (Large Gap Minimization) ----
 
-# We'll minimize the "spread" for each group's courses.
-all_groups = list({c["group"] for c in courses})
-group_course_map = {g: [] for g in all_groups}
-for i, c_info in enumerate(courses):
-    group_course_map[c_info["group"]].append(i)
+    # We'll minimize the "spread" for each group's courses.
+    # Minimize gaps if the gap_weight is greater than 0
+    gap_weight = constraints.get("gap_weight", 0)
+    if gap_weight > 0:
+        all_groups = list({c["group"] for c in courses})
+        group_course_map = {g: [] for g in all_groups}
+        for i, c_info in enumerate(courses):
+            group_course_map[c_info["group"]].append(i)
 
-min_slot = min(time_slots)
-max_slot = max(time_slots)
+        min_slot = min(time_slots)
+        max_slot = max(time_slots)
 
-# Create start_time[g] and end_time[g] for each group
-start_time = {}
-end_time = {}
+        # Create start_time[g] and end_time[g] for each group
+        start_time = {}
+        end_time = {}
 
-for g in all_groups:
-    start_time[g] = model.NewIntVar(min_slot, max_slot, f"start_{g}")
-    end_time[g]   = model.NewIntVar(min_slot, max_slot, f"end_{g}")
-    model.Add(start_time[g] <= end_time[g])
-    
-    # Link each course's assignment to start/end times
-    for i_course in group_course_map[g]:
-        for j in range(num_teachers):
-            for t_idx, slot_val in enumerate(time_slots):
-                for r in range(num_rooms):
-                    boolvar = course_assignment[(i_course, j, t_idx, r)]
-                    model.Add(start_time[g] <= slot_val).OnlyEnforceIf(boolvar)
-                    model.Add(end_time[g] >= slot_val).OnlyEnforceIf(boolvar)
+        for g in all_groups:
+            start_time[g] = model.NewIntVar(min_slot, max_slot, f"start_{g}")
+            end_time[g] = model.NewIntVar(min_slot, max_slot, f"end_{g}")
+            model.Add(start_time[g] <= end_time[g])
 
-# For each group g, define a gap variable
-gap_penalties = []
-for g in all_groups:
-    num_cg = len(group_course_map[g])
-    gap_var = model.NewIntVar(0, max_slot - min_slot, f"gap_{g}")
-    # gap_var >= end_time[g] - start_time[g] - (num_cg - 1)
-    # => end_time[g] - start_time[g] - gap_var <= num_cg - 1
-    model.Add(end_time[g] - start_time[g] - gap_var <= (num_cg - 1))
-    gap_penalties.append(gap_var)
+            # Link each course's assignment to start/end times
+            for i_course in group_course_map[g]:
+                for j in range(len(teachers)):
+                    for t_idx, slot_val in enumerate(time_slots):
+                        for r in range(len(rooms)):
+                            boolvar = course_assignment[(i_course, j, t_idx, r)]
+                            model.Add(start_time[g] <= slot_val).OnlyEnforceIf(boolvar)
+                            model.Add(end_time[g] >= slot_val).OnlyEnforceIf(boolvar)
 
-# Minimizing sum of gap variables => more compact schedules for each group
-model.Minimize(sum(gap_penalties))
+        # For each group g, define a gap variable
+        gap_penalties = []
+        for g in all_groups:
+            num_cg = len(group_course_map[g])
+            gap_var = model.NewIntVar(0, max_slot - min_slot, f"gap_{g}")
+            # gap_var >= end_time[g] - start_time[g] - (num_cg - 1)
+            # => end_time[g] - start_time[g] - gap_var <= num_cg - 1
+            model.Add(end_time[g] - start_time[g] - gap_var <= (num_cg - 1))
+            gap_penalties.append(gap_var)
+
+        # Minimizing sum of gap variables => more compact schedules for each group
+        model.Minimize(gap_weight * sum(gap_penalties))
 
 # -------------------------- 5) SOLVE THE MODEL ------------------------------
-solver = cp_model.CpSolver()
-status = solver.Solve(model)
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
 
-assignments = []
-if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-    print("\n===== SCHEDULE FOUND =====\n")
-    for i in range(num_courses):
-        for j in range(num_teachers):
-            for t_idx in range(num_time_slots):
-                for r in range(num_rooms):
-                    if solver.Value(course_assignment[(i, j, t_idx, r)]) == 1:
-                        course_id = courses[i]["id"]
-                        group_id  = courses[i]["group"]
-                        dept      = courses[i]["department"]
-                        teacher   = teachers[j]["name"]
-                        time_val  = time_slots[t_idx]
-                        room_id   = rooms[r]["id"]
-                        num_studs = courses[i]["num_students"]
-                        assignments.append({
-                            "Course": course_id,
-                            "Group": group_id,
-                            "Department": dept,
-                            "Teacher": teacher,
-                            "Time": time_val,
-                            "Room": room_id,
-                            "Students": num_studs
-                        })
-    
-    # Show group timelines
-    print("Group timeline summary (start, end, gap):")
-    for g in all_groups:
-        st  = solver.Value(start_time[g])
-        en  = solver.Value(end_time[g])
-        gap = None
-        # Find the gap var
-        for gv in gap_penalties:
-            if gv.Name() == f"gap_{g}":
-                gap = solver.Value(gv)
-                break
-        print(f" - {g}: start={st}, end={en}, gap={gap}")
+    assignments = []
+    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+        for i in range(num_courses):
+            for j in range(num_teachers):
+                for t in range(num_time_slots):
+                    for r in range(num_rooms):
+                        if solver.Value(course_assignment[(i, j, t, r)]) == 1:
+                            course_id = courses[i]["id"]
+                            teacher = teachers[j]["name"]
+                            time_val = time_slots[t]
+                            room_id = rooms[r]["id"]
+                            assignments.append({
+                                "Course": course_id,
+                                "Teacher": teacher,
+                                "Start": time_val,
+                                "End": time_val + 1,  # Assume each course is 1-hour long
+                                "Room": room_id
+                            })
 
-else:
-    print("❌ No feasible solution found.")
-
-# -------------------------- 6) PRESENT THE RESULTS --------------------------
-
-# 6.1) Pandas table
-if assignments:
-    df_schedule = pd.DataFrame(assignments)
-    # Sort by time, or group, or both
-    df_schedule.sort_values(by=["Time", "Group"], inplace=True)
-    print("\n===== Final Assignments Table =====\n")
-    print(df_schedule.to_string(index=False))
-
-    # 6.2) Simple bar charts (timeslots, rooms)
-    slot_counts = df_schedule["Time"].value_counts().sort_index()
-    plt.figure()
-    plt.bar(slot_counts.index, slot_counts.values)
-    plt.title("Number of Courses per Timeslot")
-    plt.xlabel("Timeslot (Hour)")
-    plt.ylabel("Course Count")
-    plt.tight_layout()
-    plt.show()
-
-    room_counts = df_schedule["Room"].value_counts()
-    plt.figure()
-    plt.bar(room_counts.index, room_counts.values)
-    plt.title("Number of Courses per Room")
-    plt.xlabel("Room")
-    plt.ylabel("Course Count")
-    plt.tight_layout()
-    plt.show()
-
-    # 6.3) Heatmap of Time Slot Utilization (Time vs Room)
-    import seaborn as sns
-    heatmap_df = df_schedule.groupby(["Time", "Room"]).size().unstack(fill_value=0)
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(heatmap_df, annot=True, cmap="YlGnBu", cbar=True)
-    plt.title("Room Utilization Heatmap (Time vs Room)")
-    plt.xlabel("Room")
-    plt.ylabel("Time Slot")
-    plt.tight_layout()
-    plt.show()
-
-    # 6.4) Stacked Bar Chart: Course Distribution by Department per Time Slot
-    stacked_df = df_schedule.groupby(["Time", "Department"]).size().unstack(fill_value=0)
-    stacked_df.plot(kind="bar", stacked=True, figsize=(10, 6))
-    plt.title("Stacked Bar Chart: Courses by Department per Time Slot")
-    plt.xlabel("Time Slot")
-    plt.ylabel("Number of Courses")
-    plt.legend(title="Department")
-    plt.tight_layout()
-    plt.show()
-
-    # 6.5) Gantt Chart of Course Schedule by Group
-    import matplotlib.patches as mpatches
-    fig, ax = plt.subplots(figsize=(10, 6))
-    groups = df_schedule["Group"].unique()
-    colors = plt.cm.tab20.colors
-    group_color_map = {g: colors[i % len(colors)] for i, g in enumerate(groups)}
-
-    for _, row in df_schedule.iterrows():
-        ax.barh(row["Group"], width=1, left=row["Time"], height=0.6,
-                color=group_color_map[row["Group"]], edgecolor="black")
-        ax.text(row["Time"] + 0.1, row["Group"], row["Course"], fontsize=8, va='center')
-
-    ax.set_xlabel("Time Slot")
-    ax.set_title("Gantt Chart of Course Schedule by Group")
-    plt.tight_layout()
-    plt.show()
-
-    # 6.6) Pie Chart of Room Usage Distribution
-    room_pie_counts = df_schedule["Room"].value_counts()
-    plt.figure()
-    room_pie_counts.plot(kind="pie", autopct='%1.1f%%', startangle=140)
-    plt.title("Room Usage Distribution")
-    plt.ylabel("")  # Hide y-label for aesthetics
-    plt.tight_layout()
-    plt.show()
+    return courses, teachers, rooms, time_slots, assignments
