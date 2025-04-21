@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from ver3 import load_schedule_data, solve_schedule  # Backend functions
+from ver3 import solve_schedule  # Backend functions
 
 st.set_page_config(page_title="Course Scheduling System", layout="wide")
 

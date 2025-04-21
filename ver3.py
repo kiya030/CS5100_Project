@@ -1,6 +1,5 @@
 from ortools.sat.python import cp_model
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # -------------------------- 1) DATA SETUP -----------------------------------
 # courses = [
