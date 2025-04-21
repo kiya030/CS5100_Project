@@ -1,0 +1,22 @@
+type,id,name,department,group,preferred_times,num_students,capacity,available_times
+course,CS101,Intro to CS,CS,GroupA,"8,9",60,,
+course,CS102,Data Structures,CS,GroupA,"9,10",60,,
+course,CS201,Algorithms,CS,GroupB,"10,11",60,,
+course,CS202,Operating Systems,CS,GroupB,"11,12",60,,
+course,CS301,Databases,CS,GroupC,"12,13",60,,
+course,CS302,Networks,CS,GroupC,"13,14",60,,
+course,CS401,AI,CS,GroupD,"14,15",60,,
+course,CS402,Machine Learning,CS,GroupD,"15,16",60,,
+teacher,,Dr. Smith,CS,,,"",,"8,9,10,11"
+teacher,,Dr. Johnson,CS,,,"",,"12,13,14,15"
+room,Room101,,,,"",,50,
+room,Room102,,,,"",,50,
+time_slot,8,,,,"",,,
+time_slot,9,,,,"",,,
+time_slot,10,,,,"",,,
+time_slot,11,,,,"",,,
+time_slot,12,,,,"",,,
+time_slot,13,,,,"",,,
+time_slot,14,,,,"",,,
+time_slot,15,,,,"",,,
+time_slot,16,,,,"",,,
