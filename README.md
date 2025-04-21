@@ -16,12 +16,13 @@ This project implements a **Course Scheduling Solver** using **Constraint Progra
 - **Google OR-Tools (CP-SAT Solver)**
 - **Constraint Programming (CP)**
 - **CSP (Constraint Satisfaction Problem) methodology**
+- **Streamlit** (for front-end interface)
 
 ## Installation
 Ensure you have Python installed (version 3.7+ recommended). Then, install the required dependencies:
 
 ```sh
-pip install ortools
+pip install ortools streamlit plotly pandas
 ```
 
 ## How to Run
@@ -29,17 +30,40 @@ pip install ortools
    ```sh
    git clone https://github.com/kiya030/CS5100_Project
    ```
-2. Run the scheduling script:
+2. Install dependencies:
    ```sh
-   python ver3.py
+   pip install -r requirements.txt
    ```
-3. The output will display the optimal course schedule or indicate if no valid schedule is found.
+3. Run the Streamlit front-end interface:
+   ```sh
+   streamlit run app.py
+   ```
+4. Upload a CSV file containing course, teacher, and room data.
+5. Configure hard and soft constraints through the sidebar.
+6. Click the "Run Optimization Model" button to generate the course schedule.
 
 ## Constraints Considered
+### Hard Constraints
 - **No instructor can teach two courses at the same time.**
 - **No student can attend two courses scheduled at the same time.**
 - **Room capacity cannot be exceeded.**
 - **Specific courses require specific time slots or rooms.**
+- **A teacher can only teach a course during their available times.**
+- **No two courses can be scheduled in the same room at the same time.**
+
+### Soft Constraints
+- **Minimize gaps between classes** (Allows setting a preference for compact schedules).
+
+## Example CSV Format
+The uploaded CSV file should contain data for courses, teachers, rooms, and time slots in the following format, or you can just try the "data.csv" file already been given in the folder:
+
+| type      | id        | department | group   | preferred_times    | num_students | available_times    | capacity |
+|-----------|-----------|------------|---------|--------------------|--------------|--------------------|----------|
+| course    | CS101     | CS         | GroupA  | 8,9                | 45           |                    |          |
+| teacher   | Dr. X     | CS         |         |                    |              | 8,9,10,11           |          |
+| room      | Room101   |            |         |                    |              |                    | 50       |
+| time_slot | 8         |            |         |                    |              |                    |          |
+| time_slot | 9         |            |         |                    |              |                    |          |
 
 ## Example Output
 ```sh
